@@ -25,14 +25,14 @@ abstract class ServiceProvider
      *
      * @var array
      */
-    public static $publishes = [];
+    protected static $publishes = [];
 
     /**
      * The paths that should be published by group.
      *
      * @var array
      */
-    public static $publishGroups = [];
+    protected static $publishGroups = [];
 
     /**
      * Create a new service provider instance.
@@ -81,12 +81,8 @@ abstract class ServiceProvider
      */
     protected function loadViewsFrom($path, $namespace)
     {
-        if (is_array($this->app->config['view']['paths'])) {
-            foreach ($this->app->config['view']['paths'] as $viewPath) {
-                if (is_dir($appPath = $viewPath.'/vendor/'.$namespace)) {
-                    $this->app['view']->addNamespace($namespace, $appPath);
-                }
-            }
+        if (is_dir($appPath = $this->app->resourcePath().'/views/vendor/'.$namespace)) {
+            $this->app['view']->addNamespace($namespace, $appPath);
         }
 
         $this->app['view']->addNamespace($namespace, $path);
@@ -102,17 +98,6 @@ abstract class ServiceProvider
     protected function loadTranslationsFrom($path, $namespace)
     {
         $this->app['translator']->addNamespace($namespace, $path);
-    }
-
-    /**
-     * Register a JSON translation file path.
-     *
-     * @param  string  $path
-     * @return void
-     */
-    protected function loadJsonTranslationsFrom($path)
-    {
-        $this->app['translator']->addJsonPath($path);
     }
 
     /**
@@ -139,44 +124,21 @@ abstract class ServiceProvider
      */
     protected function publishes(array $paths, $group = null)
     {
-        $this->ensurePublishArrayInitialized($class = static::class);
+        $class = static::class;
+
+        if (! array_key_exists($class, static::$publishes)) {
+            static::$publishes[$class] = [];
+        }
 
         static::$publishes[$class] = array_merge(static::$publishes[$class], $paths);
 
         if ($group) {
-            $this->addPublishGroup($group, $paths);
-        }
-    }
+            if (! array_key_exists($group, static::$publishGroups)) {
+                static::$publishGroups[$group] = [];
+            }
 
-    /**
-     * Ensure the publish array for the service provider is initialized.
-     *
-     * @param  string  $class
-     * @return void
-     */
-    protected function ensurePublishArrayInitialized($class)
-    {
-        if (! array_key_exists($class, static::$publishes)) {
-            static::$publishes[$class] = [];
+            static::$publishGroups[$group] = array_merge(static::$publishGroups[$group], $paths);
         }
-    }
-
-    /**
-     * Add a publish group / tag to the service provider.
-     *
-     * @param  string  $group
-     * @param  array  $paths
-     * @return void
-     */
-    protected function addPublishGroup($group, $paths)
-    {
-        if (! array_key_exists($group, static::$publishGroups)) {
-            static::$publishGroups[$group] = [];
-        }
-
-        static::$publishGroups[$group] = array_merge(
-            static::$publishGroups[$group], $paths
-        );
     }
 
     /**
@@ -188,69 +150,33 @@ abstract class ServiceProvider
      */
     public static function pathsToPublish($provider = null, $group = null)
     {
-        if (! is_null($paths = static::pathsForProviderOrGroup($provider, $group))) {
-            return $paths;
-        }
-
-        return collect(static::$publishes)->reduce(function ($paths, $p) {
-            return array_merge($paths, $p);
-        }, []);
-    }
-
-    /**
-     * Get the paths for the provider or group (or both).
-     *
-     * @param  string|null  $provider
-     * @param  string|null  $group
-     * @return array
-     */
-    protected static function pathsForProviderOrGroup($provider, $group)
-    {
         if ($provider && $group) {
-            return static::pathsForProviderAndGroup($provider, $group);
-        } elseif ($group && array_key_exists($group, static::$publishGroups)) {
-            return static::$publishGroups[$group];
-        } elseif ($provider && array_key_exists($provider, static::$publishes)) {
-            return static::$publishes[$provider];
-        } elseif ($group || $provider) {
-            return [];
-        }
-    }
+            if (empty(static::$publishes[$provider]) || empty(static::$publishGroups[$group])) {
+                return [];
+            }
 
-    /**
-     * Get the paths for the provider and group.
-     *
-     * @param  string  $provider
-     * @param  string  $group
-     * @return array
-     */
-    protected static function pathsForProviderAndGroup($provider, $group)
-    {
-        if (! empty(static::$publishes[$provider]) && ! empty(static::$publishGroups[$group])) {
             return array_intersect_key(static::$publishes[$provider], static::$publishGroups[$group]);
         }
 
-        return [];
-    }
+        if ($group && array_key_exists($group, static::$publishGroups)) {
+            return static::$publishGroups[$group];
+        }
 
-    /**
-     * Get the service providers available for publishing.
-     *
-     * @return array
-     */
-    public static function publishableProviders()
-    {
-        return array_keys(static::$publishes);
-    }
+        if ($provider && array_key_exists($provider, static::$publishes)) {
+            return static::$publishes[$provider];
+        }
 
-    /**
-     * Get the groups available for publishing.
-     *
-     * @return array
-     */
-    public static function publishableGroups()
-    {
-        return array_keys(static::$publishGroups);
+        if ($group || $provider) {
+            return [];
+        }
+
+        $paths = [];
+
+        foreach (static::$publishes as $class => $publish) {
+            $paths = array_merge($paths, $publish);
+        }
+
+        return $paths;
     }
 
     /**
@@ -296,5 +222,15 @@ abstract class ServiceProvider
     public function isDeferred()
     {
         return $this->defer;
+    }
+
+    /**
+     * Get a list of files that should be compiled for the package.
+     *
+     * @return array
+     */
+    public static function compiles()
+    {
+        return [];
     }
 }

@@ -3,7 +3,6 @@
 namespace Illuminate\Notifications\Messages;
 
 use Illuminate\Notifications\Action;
-use Illuminate\Contracts\Support\Htmlable;
 
 class SimpleMessage
 {
@@ -27,13 +26,6 @@ class SimpleMessage
      * @var string
      */
     public $greeting;
-
-    /**
-     * The notification's salutation.
-     *
-     * @var string
-     */
-    public $salutation;
 
     /**
      * The "intro" lines of the notification.
@@ -127,22 +119,9 @@ class SimpleMessage
     }
 
     /**
-     * Set the salutation of the notification.
-     *
-     * @param  string  $salutation
-     * @return $this
-     */
-    public function salutation($salutation)
-    {
-        $this->salutation = $salutation;
-
-        return $this;
-    }
-
-    /**
      * Add a line of text to the notification.
      *
-     * @param  mixed  $line
+     * @param  \Illuminate\Notifications\Action|string  $line
      * @return $this
      */
     public function line($line)
@@ -153,7 +132,7 @@ class SimpleMessage
     /**
      * Add a line of text to the notification.
      *
-     * @param  mixed  $line
+     * @param  \Illuminate\Notifications\Action|string|array  $line
      * @return $this
      */
     public function with($line)
@@ -172,15 +151,11 @@ class SimpleMessage
     /**
      * Format the given line of text.
      *
-     * @param  \Illuminate\Contracts\Support\Htmlable|string|array  $line
-     * @return \Illuminate\Contracts\Support\Htmlable|string
+     * @param  string|array  $line
+     * @return string
      */
     protected function formatLine($line)
     {
-        if ($line instanceof Htmlable) {
-            return $line;
-        }
-
         if (is_array($line)) {
             return implode(' ', array_map('trim', $line));
         }
@@ -214,7 +189,6 @@ class SimpleMessage
             'level' => $this->level,
             'subject' => $this->subject,
             'greeting' => $this->greeting,
-            'salutation' => $this->salutation,
             'introLines' => $this->introLines,
             'outroLines' => $this->outroLines,
             'actionText' => $this->actionText,

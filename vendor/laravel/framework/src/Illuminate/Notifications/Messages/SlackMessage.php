@@ -21,18 +21,11 @@ class SlackMessage
     public $username;
 
     /**
-     * The user emoji icon for the message.
+     * The user icon for the message.
      *
      * @var string|null
      */
     public $icon;
-
-    /**
-     * The user image icon for the message.
-     *
-     * @var string|null
-     */
-    public $image;
 
     /**
      * The channel to send the message on.
@@ -47,27 +40,6 @@ class SlackMessage
      * @var string
      */
     public $content;
-
-    /**
-     * Indicates if channel names and usernames should be linked.
-     *
-     * @var bool
-     */
-    public $linkNames = 0;
-
-    /**
-     * Indicates if you want a preview of links inlined in the message.
-     *
-     * @var bool
-     */
-    public $unfurlLinks;
-
-    /**
-     * Indicates if you want a preview of links to media inlined in the message.
-     *
-     * @var bool
-     */
-    public $unfurlMedia;
 
     /**
      * The message's attachments.
@@ -120,7 +92,7 @@ class SlackMessage
     }
 
     /**
-     * Set a custom username and optional emoji icon for the Slack message.
+     * Set a custom user icon for the Slack message.
      *
      * @param  string  $username
      * @param  string|null  $icon
@@ -133,19 +105,6 @@ class SlackMessage
         if (! is_null($icon)) {
             $this->icon = $icon;
         }
-
-        return $this;
-    }
-
-    /**
-     * Set a custom image icon the message should use.
-     *
-     * @param  string  $image
-     * @return $this
-     */
-    public function image($image)
-    {
-        $this->image = $image;
 
         return $this;
     }
@@ -206,44 +165,6 @@ class SlackMessage
             case 'warning':
                 return 'warning';
         }
-    }
-
-    /**
-     * Find and link channel names and usernames.
-     *
-     * @return $this
-     */
-    public function linkNames()
-    {
-        $this->linkNames = 1;
-
-        return $this;
-    }
-
-    /**
-     * Find and link channel names and usernames.
-     *
-     * @param  string  $unfurl
-     * @return $this
-     */
-    public function unfurlLinks($unfurl)
-    {
-        $this->unfurlLinks = $unfurl;
-
-        return $this;
-    }
-
-    /**
-     * Find and link channel names and usernames.
-     *
-     * @param  string  $unfurl
-     * @return $this
-     */
-    public function unfurlMedia($unfurl)
-    {
-        $this->unfurlMedia = $unfurl;
-
-        return $this;
     }
 
     /**

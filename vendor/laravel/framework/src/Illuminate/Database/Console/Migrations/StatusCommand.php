@@ -33,7 +33,7 @@ class StatusCommand extends BaseCommand
      * Create a new migration rollback command instance.
      *
      * @param  \Illuminate\Database\Migrations\Migrator $migrator
-     * @return void
+     * @return \Illuminate\Database\Console\Migrations\StatusCommand
      */
     public function __construct(Migrator $migrator)
     {
@@ -47,7 +47,7 @@ class StatusCommand extends BaseCommand
      *
      * @return void
      */
-    public function handle()
+    public function fire()
     {
         $this->migrator->setConnection($this->option('database'));
 
@@ -57,29 +57,20 @@ class StatusCommand extends BaseCommand
 
         $ran = $this->migrator->getRepository()->getRan();
 
-        if (count($migrations = $this->getStatusFor($ran)) > 0) {
+        $migrations = Collection::make($this->getAllMigrationFiles())
+                            ->map(function ($migration) use ($ran) {
+                                $migrationName = $this->migrator->getMigrationName($migration);
+
+                                return in_array($migrationName, $ran)
+                                        ? ['<info>Y</info>', $migrationName]
+                                        : ['<fg=red>N</fg=red>', $migrationName];
+                            });
+
+        if (count($migrations) > 0) {
             $this->table(['Ran?', 'Migration'], $migrations);
         } else {
             $this->error('No migrations found');
         }
-    }
-
-    /**
-     * Get the status for the given ran migrations.
-     *
-     * @param  array  $ran
-     * @return \Illuminate\Support\Collection
-     */
-    protected function getStatusFor(array $ran)
-    {
-        return Collection::make($this->getAllMigrationFiles())
-                    ->map(function ($migration) use ($ran) {
-                        $migrationName = $this->migrator->getMigrationName($migration);
-
-                        return in_array($migrationName, $ran)
-                                ? ['<info>Y</info>', $migrationName]
-                                : ['<fg=red>N</fg=red>', $migrationName];
-                    });
     }
 
     /**

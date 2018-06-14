@@ -4,13 +4,14 @@ namespace Illuminate\Cache;
 
 use Closure;
 use Exception;
+use Carbon\Carbon;
 use Illuminate\Contracts\Cache\Store;
-use Illuminate\Support\InteractsWithTime;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Contracts\Encryption\Encrypter as EncrypterContract;
 
 class DatabaseStore implements Store
 {
-    use InteractsWithTime, RetrievesMultipleKeys;
+    use RetrievesMultipleKeys;
 
     /**
      * The database connection instance.
@@ -18,6 +19,13 @@ class DatabaseStore implements Store
      * @var \Illuminate\Database\ConnectionInterface
      */
     protected $connection;
+
+    /**
+     * The encrypter instance.
+     *
+     * @var \Illuminate\Contracts\Encryption\Encrypter
+     */
+    protected $encrypter;
 
     /**
      * The name of the cache table.
@@ -37,14 +45,16 @@ class DatabaseStore implements Store
      * Create a new database store.
      *
      * @param  \Illuminate\Database\ConnectionInterface  $connection
+     * @param  \Illuminate\Contracts\Encryption\Encrypter  $encrypter
      * @param  string  $table
      * @param  string  $prefix
      * @return void
      */
-    public function __construct(ConnectionInterface $connection, $table, $prefix = '')
+    public function __construct(ConnectionInterface $connection, EncrypterContract $encrypter, $table, $prefix = '')
     {
         $this->table = $table;
         $this->prefix = $prefix;
+        $this->encrypter = $encrypter;
         $this->connection = $connection;
     }
 
@@ -63,22 +73,19 @@ class DatabaseStore implements Store
         // If we have a cache record we will check the expiration time against current
         // time on the system and see if the record has expired. If it has, we will
         // remove the records from the database table so it isn't returned again.
-        if (is_null($cache)) {
-            return;
+        if (! is_null($cache)) {
+            if (is_array($cache)) {
+                $cache = (object) $cache;
+            }
+
+            if (Carbon::now()->getTimestamp() >= $cache->expiration) {
+                $this->forget($key);
+
+                return;
+            }
+
+            return $this->encrypter->decrypt($cache->value);
         }
-
-        $cache = is_array($cache) ? (object) $cache : $cache;
-
-        // If this cache expiration date is past the current time, we will remove this
-        // item from the cache. Then we will return a null value since the cache is
-        // expired. We will use "Carbon" to make this comparison with the column.
-        if ($this->currentTime() >= $cache->expiration) {
-            $this->forget($key);
-
-            return;
-        }
-
-        return unserialize($cache->value);
     }
 
     /**
@@ -93,14 +100,17 @@ class DatabaseStore implements Store
     {
         $key = $this->prefix.$key;
 
-        $value = serialize($value);
+        // All of the cached values in the database are encrypted in case this is used
+        // as a session data store by the consumer. We'll also calculate the expire
+        // time and place that on the table so we will check it on our retrieval.
+        $value = $this->encrypter->encrypt($value);
 
         $expiration = $this->getTime() + (int) ($minutes * 60);
 
         try {
             $this->table()->insert(compact('key', 'value', 'expiration'));
         } catch (Exception $e) {
-            $this->table()->where('key', $key)->update(compact('value', 'expiration'));
+            $this->table()->where('key', '=', $key)->update(compact('value', 'expiration'));
         }
     }
 
@@ -145,34 +155,25 @@ class DatabaseStore implements Store
         return $this->connection->transaction(function () use ($key, $value, $callback) {
             $prefixed = $this->prefix.$key;
 
-            $cache = $this->table()->where('key', $prefixed)
-                        ->lockForUpdate()->first();
+            $cache = $this->table()->where('key', $prefixed)->lockForUpdate()->first();
 
-            // If there is no value in the cache, we will return false here. Otherwise the
-            // value will be decrypted and we will proceed with this function to either
-            // increment or decrement this value based on the given action callbacks.
             if (is_null($cache)) {
                 return false;
             }
 
-            $cache = is_array($cache) ? (object) $cache : $cache;
+            if (is_array($cache)) {
+                $cache = (object) $cache;
+            }
 
-            $current = unserialize($cache->value);
-
-            // Here we'll call this callback function that was given to the function which
-            // is used to either increment or decrement the function. We use a callback
-            // so we do not have to recreate all this logic in each of the functions.
+            $current = $this->encrypter->decrypt($cache->value);
             $new = $callback((int) $current, $value);
 
             if (! is_numeric($current)) {
                 return false;
             }
 
-            // Here we will update the values in the table. We will also encrypt the value
-            // since database cache values are encrypted by default with secure storage
-            // that can't be easily read. We will return the new value after storing.
             $this->table()->where('key', $prefixed)->update([
-                'value' => serialize($new),
+                'value' => $this->encrypter->encrypt($new),
             ]);
 
             return $new;
@@ -186,7 +187,7 @@ class DatabaseStore implements Store
      */
     protected function getTime()
     {
-        return $this->currentTime();
+        return Carbon::now()->getTimestamp();
     }
 
     /**
@@ -217,11 +218,11 @@ class DatabaseStore implements Store
     /**
      * Remove all items from the cache.
      *
-     * @return bool
+     * @return void
      */
     public function flush()
     {
-        return (bool) $this->table()->delete();
+        $this->table()->delete();
     }
 
     /**
@@ -242,6 +243,16 @@ class DatabaseStore implements Store
     public function getConnection()
     {
         return $this->connection;
+    }
+
+    /**
+     * Get the encrypter instance.
+     *
+     * @return \Illuminate\Contracts\Encryption\Encrypter
+     */
+    public function getEncrypter()
+    {
+        return $this->encrypter;
     }
 
     /**
